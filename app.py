@@ -7,48 +7,42 @@ import os
 
 app = FastAPI(title="Ecumex - Buscador de Ventas")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CARPETA_FOTOS = os.path.join(BASE_DIR, "fotos")
-CARPETA_TEMPLATES = os.path.join(BASE_DIR, "templates")
-RUTA_CSV = os.path.join(BASE_DIR, "data", "productos.csv")
+# --- RUTAS SIMPLES PARA LA NUBE ---
+CARPETA_FOTOS = "fotos"
+CARPETA_TEMPLATES = "templates"
+RUTA_CSV = "data/productos.csv"
 
 app.mount("/fotos", StaticFiles(directory=CARPETA_FOTOS), name="fotos")
 templates = Jinja2Templates(directory=CARPETA_TEMPLATES)
 
 df_catalogo = pd.DataFrame()
+
 if os.path.exists(RUTA_CSV):
     df_catalogo = pd.read_csv(RUTA_CSV)
-    for col in ['codigo', 'descripcion', 'marca', 'modelo']:
+    for col in ['codigo', 'descripcion', 'marca']:
         if col in df_catalogo.columns:
             df_catalogo[col] = df_catalogo[col].astype(str).fillna('')
+    
+    # TRUCO EXTRA: Extraer modelos comunes
+    MODELOS_COMUNES = ["HILUX", "COROLLA", "YARIS", "RANGER", "SPARK", "AVEO", "DMAX", "BT50", "TUCSON", "RIO", "PICANTO", "LOGAN"]
+    df_catalogo['modelo'] = 'GENERAL'
+    
+    for mod in MODELOS_COMUNES:
+        df_catalogo.loc[df_catalogo['descripcion'].str.upper().str.contains(mod), 'modelo'] = mod
 
 @app.get("/")
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# NUEVA RUTA: Envía marcas y sus modelos agrupados
-@app.get("/api/indice")
-async def obtener_indice():
+@app.get("/api/filtros")
+async def obtener_filtros():
     if df_catalogo.empty:
-        return JSONResponse({})
+        return JSONResponse({"marcas": [], "modelos": []})
     
-    indice = {}
-    # Obtenemos todas las marcas únicas
     marcas = sorted(df_catalogo['marca'].unique().tolist())
+    modelos = sorted([m for m in df_catalogo['modelo'].unique().tolist() if m != 'GENERAL'])
     
-    for m in marcas:
-        if m == 'GENERAL': continue
-        # Para cada marca, buscamos sus modelos únicos (ignorando GENERAL)
-        modelos_marca = df_catalogo[df_catalogo['marca'] == m]['modelo'].unique().tolist()
-        modelos_marca = sorted([mod for mod in modelos_marca if mod != 'GENERAL'])
-        
-        # Si la marca no tiene modelos específicos, ponemos uno genérico
-        if not modelos_marca:
-            modelos_marca = ["TODOS LOS MODELOS"]
-            
-        indice[m] = modelos_marca
-        
-    return JSONResponse(indice)
+    return JSONResponse({"marcas": marcas, "modelos": modelos})
 
 @app.get("/api/buscar")
 async def buscar(q: str = "", marca: str = "", modelo: str = ""):
@@ -59,19 +53,17 @@ async def buscar(q: str = "", marca: str = "", modelo: str = ""):
     
     if marca and marca != "TODAS":
         df_filtrado = df_filtrado[df_filtrado['marca'] == marca]
-        
-    if modelo and modelo != "TODOS" and modelo != "TODOS LOS MODELOS":
+    if modelo and modelo != "TODOS":
         df_filtrado = df_filtrado[df_filtrado['modelo'] == modelo]
         
     if q:
         mask = (
             df_filtrado['codigo'].str.contains(q, case=False, na=False) |
-            df_filtrado['descripcion'].str.contains(q, case=False, na=False)
+            df_filtrado['descripcion'].str.contains(q, case=False, na=False) |
+            df_filtrado['marca'].str.contains(q, case=False, na=False)
         )
         df_filtrado = df_filtrado[mask]
         
-    # Ordenamos alfabéticamente por defecto
-    df_filtrado = df_filtrado.sort_values(by='descripcion')
     resultados = df_filtrado.head(100).to_dict(orient="records")
 
     for item in resultados:
