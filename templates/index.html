@@ -15,25 +15,20 @@
         
         #buscador { flex-grow: 1; max-width: 500px; padding: 12px 20px; font-size: 16px; border: 2px solid #25D366; border-radius: 30px; outline: none; }
         
-        /* MENÚ JERÁRQUICO */
         .nav-path { display: flex; align-items: center; gap: 10px; background: #e8f5e9; padding: 10px 20px; border-radius: 8px; margin-bottom: 10px; overflow-x: auto; white-space: nowrap; display: none; }
         .nav-btn { background: transparent; border: none; color: #2e7d32; font-weight: bold; font-size: 15px; cursor: pointer; }
-        .nav-btn:hover { text-decoration: underline; }
         .nav-btn.active { color: #1a1a1a; font-size: 16px; }
         .nav-separator { color: #81c784; font-weight: bold; }
 
-        /* GRILLA DE OPCIONES */
         #menu-opciones { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 200px; overflow-y: auto; padding: 10px 0; border-top: 1px solid #eee; }
         .opt-btn { background: #fff; border: 1px solid #ccc; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; color: #444; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .opt-btn:hover { background: #25D366; color: white; border-color: #25D366; }
 
-        /* PRODUCTOS */
         #contenedor-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; padding: 20px; max-width: 1200px; margin: 0 auto; }
         .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
         .card-img { background: #f9f9f9; padding: 10px; text-align: center; }
         .card-img img { max-width: 100%; height: 160px; object-fit: contain; }
         
-        /* ESTILOS DE LOS BOTONES */
         .btn-compartir { display: block; background: #007bff; color: white; text-decoration: none; padding: 8px; border-radius: 6px; font-size: 14px; margin-top: 10px; font-weight: bold; text-align: center; border: none; cursor: pointer; width: 100%; transition: 0.2s; }
         .btn-compartir:hover { background: #0056b3; }
         
@@ -48,16 +43,14 @@
         .precio { font-size: 22px !important; font-weight: bold; color: #d32f2f; margin: 10px 0 !important; }
         
         .btn-wa { background: #25D366; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: auto; transition: 0.2s;}
-        .btn-wa:hover { background: #1ebe5d; }
     </style>
 </head>
 <body>
     <header>
         <div class="top-bar">
             <h1>⚡ Catálogo Ecumex</h1>
-            <input type="text" id="buscador" placeholder="Búsqueda global (código o repuesto)..." autocomplete="off" autofocus>
+            <input type="text" id="buscador" placeholder="Búsqueda global..." autocomplete="off" autofocus>
         </div>
-
         <div class="nav-path" id="nav-path"></div>
         <div id="menu-opciones"></div>
     </header>
@@ -72,31 +65,22 @@
 
         let indiceGlobal = {};
         let marcaActual = "";
-        let modeloActual = "";
 
-        // 1. Iniciar la App
         async function iniciarApp() {
-            try {
-                const res = await fetch('/api/filtros');
-                const data = await res.json();
-                
-                indiceGlobal = {};
-                data.marcas.forEach(m => indiceGlobal[m] = []);
-                mostrarMarcas();
-            } catch (error) {
-                console.error("Error cargando datos:", error);
-            }
+            const res = await fetch('/api/filtros');
+            const data = await res.json();
+            indiceGlobal = {};
+            data.marcas.forEach(m => indiceGlobal[m] = []);
+            mostrarMarcas();
         }
 
-        // 2. Mostrar MARCAS
         function mostrarMarcas() {
             marcaActual = "";
-            modeloActual = "";
             navPath.style.display = "none";
             buscador.value = "";
             contenedor.innerHTML = "";
-            
             menuOpciones.innerHTML = "";
+            
             Object.keys(indiceGlobal).forEach(marca => {
                 const btn = document.createElement('button');
                 btn.className = 'opt-btn';
@@ -106,25 +90,17 @@
             });
         }
 
-        // 3. Seleccionar MARCA
         function seleccionarMarca(marca) {
             marcaActual = marca;
-            modeloActual = "";
             buscador.value = "";
-            actualizarMigasDePan();
-            cargarProductos();
-        }
-
-        // 4. Ruta de navegación
-        function actualizarMigasDePan() {
             navPath.style.display = "flex";
             navPath.innerHTML = `
                 <button class="nav-btn" onclick="mostrarMarcas()">🏠 Inicio</button>
-                ${marcaActual ? `<span class="nav-separator">></span> <span class="nav-btn active">${marcaActual}</span>` : ''}
+                <span class="nav-separator">></span> <span class="nav-btn active">${marcaActual}</span>
             `;
+            cargarProductos();
         }
 
-        // 5. Cargar Productos
         async function cargarProductos() {
             menuOpciones.innerHTML = "";
             const q = buscador.value;
@@ -134,15 +110,18 @@
             const productos = await res.json();
             contenedor.innerHTML = "";
             
-            if (productos.length === 0) {
-                contenedor.innerHTML = "<p style='grid-column: 1/-1; text-align:center; font-size:18px;'>No se encontraron productos.</p>";
+            // FILTRO: Ignorar productos que tengan precio 0 (como el arnés)
+            const productosValidos = productos.filter(p => p.precio_venta > 0);
+
+            if (productosValidos.length === 0) {
+                contenedor.innerHTML = "<p style='grid-column: 1/-1; text-align:center; font-size:18px; padding:20px;'>No se encontraron productos con precio disponible.</p>";
                 return;
             }
 
-            productos.forEach(p => {
+            productosValidos.forEach(p => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                const mensajeSeguro = p.mensaje_wa.replace(/'/g, "\\'");
+                const mensajeSeguro = p.mensaje_wa.replace(/'/g, "\\'").replace(/\n/g, "\\n");
                 
                 card.innerHTML = `
                     <div class="card-img">
@@ -157,57 +136,54 @@
                         <h3 title="${p.descripcion}">${p.descripcion}</h3>
                         <p><b>Código:</b> ${p.codigo} | <b>Stock:</b> ${p.stock}</p>
                         <p class="precio">$${p.precio_venta.toFixed(2)}</p>
-                        <button class="btn-wa" onclick="copiarWA('${mensajeSeguro}')">
+                        <button class="btn-wa" id="btn-copia-${p.codigo}" onclick="copiarWA('${p.codigo}')">
                             📋 Copiar Mensaje para WA
                         </button>
                     </div>
                 `;
                 contenedor.appendChild(card);
+                
+                // Guardamos el mensaje en una variable global para que el botón lo lea sin errores
+                window['msg_' + p.codigo] = p.mensaje_wa;
             });
         }
 
-        // 6. Buscador
         let timeout = null;
         buscador.addEventListener('input', () => {
             clearTimeout(timeout);
             timeout = setTimeout(cargarProductos, 300);
         });
 
-        // 7. FUNCIÓN DE COMPARTIR IMAGEN (Sin descargar)
         function compartirImagen(urlImagen, codigo) {
             fetch(urlImagen)
                 .then(res => res.blob())
                 .then(blob => {
                     const file = new File([blob], `${codigo}.png`, { type: "image/png" });
                     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                        navigator.share({
-                            files: [file],
-                            title: 'Repuesto Ecumex',
-                            text: 'Foto del repuesto'
-                        }).catch(() => {});
+                        navigator.share({ files: [file], title: 'Repuesto Ecumex' }).catch(() => {});
                     } else {
                         window.open(urlImagen, '_blank');
                     }
                 })
-                .catch(() => {
-                    window.open(urlImagen, '_blank');
-                });
+                .catch(() => window.open(urlImagen, '_blank'));
         }
 
-        // 8. FUNCIÓN COPIAR MENSAJE (Arreglada para celular)
-        function copiarWA(texto) {
+        // FUNCIÓN DE COPIAR CORREGIDA PARA MÓVILES
+        function copiarWA(codigo) {
+            const texto = window['msg_' + codigo];
+            const btn = document.getElementById('btn-copia-' + codigo);
+
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(texto).then(() => {
-                    alert("✅ Mensaje copiado. ¡Pégalo en WhatsApp!");
-                }).catch(() => {
-                    copiarAntiguo(texto);
-                });
+                    btn.innerText = "✅ ¡Copiado!";
+                    setTimeout(() => btn.innerText = "📋 Copiar Mensaje para WA", 2000);
+                }).catch(() => copiarAntiguo(texto, btn));
             } else {
-                copiarAntiguo(texto);
+                copiarAntiguo(texto, btn);
             }
         }
 
-        function copiarAntiguo(texto) {
+        function copiarAntiguo(texto, btn) {
             const textArea = document.createElement("textarea");
             textArea.value = texto;
             textArea.style.position = "fixed";
@@ -217,14 +193,14 @@
             textArea.select();
             try {
                 document.execCommand('copy');
-                alert("✅ Mensaje copiado. ¡Pégalo en WhatsApp!");
+                btn.innerText = "✅ ¡Copiado!";
+                setTimeout(() => btn.innerText = "📋 Copiar Mensaje para WA", 2000);
             } catch (err) {
-                alert("❌ Hubo un error al copiar.");
+                alert("❌ Hubo un error. Selecciona el texto manualmente.");
             }
             textArea.remove();
         }
 
-        // Arrancar
         iniciarApp();
     </script>
 </body>
