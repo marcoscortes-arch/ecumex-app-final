@@ -44,12 +44,20 @@ async def home():
 @app.get("/api/filtros")
 async def obtener_filtros():
     if df_catalogo.empty:
-        return JSONResponse({"marcas": [], "modelos": []})
+        return JSONResponse({"marcas": [], "modelos": [], "categorias": []})
     
     marcas = sorted(df_catalogo['marca'].unique().tolist())
     modelos = sorted([m for m in df_catalogo['modelo'].unique().tolist() if m != 'GENERAL'])
     
-    return JSONResponse({"marcas": marcas, "modelos": modelos})
+    # Extraer categorías comunes
+    CATEGORIAS_COMUNES = ["ARNES", "BALATA", "PASTILLA", "CREMALLERA", "TERMINAL", "ROTULA", "BUJIA", "BOMBA", "SENSOR", "FILTRO", "AMORTIGUADOR", "MANGUERA", "RODAMIENTO"]
+    categorias = []
+    for desc in df_catalogo['descripcion'].astype(str):
+        for cat in CATEGORIAS_COMUNES:
+            if cat in desc.upper() and cat not in categorias:
+                categorias.append(cat)
+    
+    return JSONResponse({"marcas": marcas, "modelos": modelos, "categorias": sorted(categorias)})
 
 @app.get("/api/buscar")
 async def buscar(q: str = "", marca: str = "", modelo: str = ""):
@@ -71,6 +79,8 @@ async def buscar(q: str = "", marca: str = "", modelo: str = ""):
         )
         df_filtrado = df_filtrado[mask]
         
+    # --- ORDEN ALFABÉTICO ---
+    df_filtrado = df_filtrado.sort_values(by='descripcion', ascending=True)
     resultados = df_filtrado.head(100).to_dict(orient="records")
 
     for item in resultados:
@@ -78,9 +88,19 @@ async def buscar(q: str = "", marca: str = "", modelo: str = ""):
         try: precio = float(item.get('precio_venta', 0))
         except: precio = 0.0
             
+        # Limpiamos la descripción para que no muestre códigos mezclados del PDF
+        desc_limpia = item.get('descripcion', '')
+        if item.get('codigo') in desc_limpia:
+            desc_limpia = desc_limpia.replace(item.get('codigo'), '').strip()
+        if '/' in desc_limpia:
+            desc_limpia = desc_limpia.split('/')[0].strip()
+        if not desc_limpia:
+            desc_limpia = "Repuesto " + item.get('modelo', 'General')
+
         item['mensaje_wa'] = (
             f"Buen día, le saludamos de Ecumex. Le comparto la oferta del repuesto:\n\n"
-            f"📌 *{item.get('descripcion', '')}*\n"
+            f"📌 *{desc_limpia}*\n"
+            f"🚘 *Vehículo:* {item.get('marca', '')} {item.get('modelo', '')}\n"
             f"🔹 Código: {item.get('codigo', '')}\n"
             f"💰 Precio: ${precio:.2f}\n"
             f"🚚 Envío: $10.00 (Servientrega, paga al recibir)\n\n"

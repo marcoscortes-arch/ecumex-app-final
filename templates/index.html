@@ -20,9 +20,10 @@
         .nav-btn.active { color: #1a1a1a; font-size: 16px; }
         .nav-separator { color: #81c784; font-weight: bold; }
 
-        #menu-opciones { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-height: 200px; overflow-y: auto; padding: 10px 0; border-top: 1px solid #eee; }
+        #menu-opciones { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; padding: 10px 0; border-top: 1px solid #eee; }
         .opt-btn { background: #fff; border: 1px solid #ccc; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; color: #444; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .opt-btn:hover { background: #25D366; color: white; border-color: #25D366; }
+        .opt-btn.active { background: #25D366; color: white; border-color: #25D366; }
 
         #contenedor-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; padding: 20px; max-width: 1200px; margin: 0 auto; }
         .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
@@ -30,7 +31,6 @@
         .card-img img { max-width: 100%; height: 160px; object-fit: contain; }
         
         .btn-compartir { display: block; background: #007bff; color: white; text-decoration: none; padding: 8px; border-radius: 6px; font-size: 14px; margin-top: 10px; font-weight: bold; text-align: center; border: none; cursor: pointer; width: 100%; transition: 0.2s; }
-        .btn-compartir:hover { background: #0056b3; }
         
         .card-info { padding: 15px; display: flex; flex-direction: column; flex-grow: 1; }
         .badges { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -63,25 +63,23 @@
         const navPath = document.getElementById('nav-path');
         const menuOpciones = document.getElementById('menu-opciones');
 
-        let indiceGlobal = {};
-        let marcaActual = "";
+        let datosGlobales = { marcas: [], modelos: [], categorias: [] };
+        let estado = { marca: "", modelo: "", categoria: "" };
 
         async function iniciarApp() {
             const res = await fetch('/api/filtros');
-            const data = await res.json();
-            indiceGlobal = {};
-            data.marcas.forEach(m => indiceGlobal[m] = []);
+            datosGlobales = await res.json();
             mostrarMarcas();
         }
 
         function mostrarMarcas() {
-            marcaActual = "";
+            estado = { marca: "", modelo: "", categoria: "" };
             navPath.style.display = "none";
             buscador.value = "";
             contenedor.innerHTML = "";
             menuOpciones.innerHTML = "";
             
-            Object.keys(indiceGlobal).forEach(marca => {
+            datosGlobales.marcas.forEach(marca => {
                 const btn = document.createElement('button');
                 btn.className = 'opt-btn';
                 btn.innerText = marca;
@@ -91,37 +89,77 @@
         }
 
         function seleccionarMarca(marca) {
-            marcaActual = marca;
-            buscador.value = "";
-            navPath.style.display = "flex";
-            navPath.innerHTML = `
-                <button class="nav-btn" onclick="mostrarMarcas()">🏠 Inicio</button>
-                <span class="nav-separator">></span> <span class="nav-btn active">${marcaActual}</span>
-            `;
+            estado = { marca: marca, modelo: "", categoria: "" };
+            actualizarMigas();
+            cargarProductos();
+            
+            menuOpciones.innerHTML = "";
+            datosGlobales.modelos.forEach(mod => {
+                const btn = document.createElement('button');
+                btn.className = 'opt-btn';
+                btn.innerText = mod;
+                btn.onclick = () => seleccionarModelo(mod);
+                menuOpciones.appendChild(btn);
+            });
+        }
+
+        function seleccionarModelo(modelo) {
+            estado.modelo = modelo;
+            estado.categoria = "";
+            actualizarMigas();
+            cargarProductos();
+            
+            menuOpciones.innerHTML = "";
+            datosGlobales.categorias.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = 'opt-btn';
+                btn.innerText = cat;
+                btn.onclick = () => seleccionarCategoria(cat);
+                menuOpciones.appendChild(btn);
+            });
+        }
+
+        function seleccionarCategoria(categoria) {
+            estado.categoria = categoria;
+            actualizarMigas();
             cargarProductos();
         }
 
+        function actualizarMigas() {
+            navPath.style.display = "flex";
+            navPath.innerHTML = `
+                <button class="nav-btn" onclick="mostrarMarcas()">🏠 Inicio</button>
+                ${estado.marca ? `<span class="nav-separator">></span> <button class="nav-btn" onclick="seleccionarMarca('${estado.marca}')">${estado.marca}</button>` : ''}
+                ${estado.modelo ? `<span class="nav-separator">></span> <button class="nav-btn" onclick="seleccionarModelo('${estado.modelo}')">${estado.modelo}</button>` : ''}
+                ${estado.categoria ? `<span class="nav-separator">></span> <span class="nav-btn active">${estado.categoria}</span>` : ''}
+            `;
+        }
+
         async function cargarProductos() {
-            menuOpciones.innerHTML = "";
             const q = buscador.value;
-            let url = `/api/buscar?q=${encodeURIComponent(q)}&marca=${marcaActual}`;
+            let url = `/api/buscar?q=${encodeURIComponent(q)}&marca=${estado.marca}&modelo=${estado.modelo}`;
 
             const res = await fetch(url);
-            const productos = await res.json();
+            let productos = await res.json();
+            
+            if (estado.categoria) {
+                productos = productos.filter(p => p.descripcion.toUpperCase().includes(estado.categoria));
+            }
+
+            productos.sort((a, b) => a.descripcion.localeCompare(b.descripcion));
+            productos = productos.filter(p => p.precio_venta > 0);
+
             contenedor.innerHTML = "";
             
-            // FILTRO: Ignorar productos que tengan precio 0 (como el arnés)
-            const productosValidos = productos.filter(p => p.precio_venta > 0);
-
-            if (productosValidos.length === 0) {
-                contenedor.innerHTML = "<p style='grid-column: 1/-1; text-align:center; font-size:18px; padding:20px;'>No se encontraron productos con precio disponible.</p>";
+            if (productos.length === 0) {
+                contenedor.innerHTML = "<p style='grid-column: 1/-1; text-align:center; font-size:18px; padding:20px;'>No se encontraron productos.</p>";
                 return;
             }
 
-            productosValidos.forEach(p => {
+            productos.forEach(p => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                const mensajeSeguro = p.mensaje_wa.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+                window['msg_' + p.codigo] = p.mensaje_wa;
                 
                 card.innerHTML = `
                     <div class="card-img">
@@ -142,9 +180,6 @@
                     </div>
                 `;
                 contenedor.appendChild(card);
-                
-                // Guardamos el mensaje en una variable global para que el botón lo lea sin errores
-                window['msg_' + p.codigo] = p.mensaje_wa;
             });
         }
 
@@ -168,7 +203,6 @@
                 .catch(() => window.open(urlImagen, '_blank'));
         }
 
-        // FUNCIÓN DE COPIAR CORREGIDA PARA MÓVILES
         function copiarWA(codigo) {
             const texto = window['msg_' + codigo];
             const btn = document.getElementById('btn-copia-' + codigo);
@@ -196,7 +230,7 @@
                 btn.innerText = "✅ ¡Copiado!";
                 setTimeout(() => btn.innerText = "📋 Copiar Mensaje para WA", 2000);
             } catch (err) {
-                alert("❌ Hubo un error. Selecciona el texto manualmente.");
+                alert("❌ Hubo un error.");
             }
             textArea.remove();
         }
