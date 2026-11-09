@@ -1,38 +1,45 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 import pandas as pd
 import os
 
 app = FastAPI(title="Ecumex - Buscador de Ventas")
 
-# --- RUTAS SIMPLES PARA LA NUBE ---
+# Rutas relativas
 CARPETA_FOTOS = "fotos"
-CARPETA_TEMPLATES = "templates"
 RUTA_CSV = "data/productos.csv"
 
-app.mount("/fotos", StaticFiles(directory=CARPETA_FOTOS), name="fotos")
-templates = Jinja2Templates(directory=CARPETA_TEMPLATES)
+# Montar fotos (si la carpeta existe)
+if os.path.exists(CARPETA_FOTOS):
+    app.mount("/fotos", StaticFiles(directory=CARPETA_FOTOS), name="fotos")
 
 df_catalogo = pd.DataFrame()
 
 if os.path.exists(RUTA_CSV):
-    df_catalogo = pd.read_csv(RUTA_CSV)
-    for col in ['codigo', 'descripcion', 'marca']:
-        if col in df_catalogo.columns:
-            df_catalogo[col] = df_catalogo[col].astype(str).fillna('')
-    
-    # TRUCO EXTRA: Extraer modelos comunes
-    MODELOS_COMUNES = ["HILUX", "COROLLA", "YARIS", "RANGER", "SPARK", "AVEO", "DMAX", "BT50", "TUCSON", "RIO", "PICANTO", "LOGAN"]
-    df_catalogo['modelo'] = 'GENERAL'
-    
-    for mod in MODELOS_COMUNES:
-        df_catalogo.loc[df_catalogo['descripcion'].str.upper().str.contains(mod), 'modelo'] = mod
+    try:
+        df_catalogo = pd.read_csv(RUTA_CSV)
+        for col in ['codigo', 'descripcion', 'marca']:
+            if col in df_catalogo.columns:
+                df_catalogo[col] = df_catalogo[col].astype(str).fillna('')
+        
+        MODELOS_COMUNES = ["HILUX", "COROLLA", "YARIS", "RANGER", "SPARK", "AVEO", "DMAX", "BT50", "TUCSON", "RIO", "PICANTO", "LOGAN"]
+        df_catalogo['modelo'] = 'GENERAL'
+        
+        for mod in MODELOS_COMUNES:
+            df_catalogo.loc[df_catalogo['descripcion'].str.upper().str.contains(mod), 'modelo'] = mod
+    except Exception as e:
+        print(f"Error cargando CSV: {e}")
 
-@app.get("/")
-async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# --- LEER EL HTML DIRECTAMENTE DEL ARCHIVO ---
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    try:
+        with open("templates/index.html", "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        return HTMLResponse(content=f"<h1>Error cargando el HTML</h1><p>Detalle: {str(e)}</p>", status_code=500)
 
 @app.get("/api/filtros")
 async def obtener_filtros():
